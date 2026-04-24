@@ -1,0 +1,115 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "content-brief",
+  "title": "ContentBrief",
+  "description": "Normalized input contract produced by the intake stage. Represents one content production request.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "brief_id",
+    "goal",
+    "format",
+    "language",
+    "constraints",
+    "required_unknowns",
+    "created_at",
+    "status"
+  ],
+  "properties": {
+    "brief_id": {
+      "type": "string",
+      "description": "Unique identifier for this brief. Format: brief_{run_id}.",
+      "minLength": 1
+    },
+    "goal": {
+      "type": "string",
+      "description": "What the content should achieve. Written as a plain instruction.",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "format": {
+      "type": "string",
+      "description": "Primary content format to produce.",
+      "enum": ["video", "image", "text", "mixed"]
+    },
+    "language": {
+      "type": "string",
+      "description": "BCP-47 language code for the output content (e.g. en, uk, ru).",
+      "minLength": 2,
+      "maxLength": 10
+    },
+    "channel": {
+      "type": ["string", "null"],
+      "description": "Target distribution channel (e.g. youtube, instagram, tiktok). Null if not specified.",
+      "examples": ["youtube", "instagram", "tiktok", "facebook", "linkedin"]
+    },
+    "geo": {
+      "type": ["string", "null"],
+      "description": "Target geography as ISO 3166-1 alpha-2 country code or region name. Null if not specified.",
+      "examples": ["UA", "PL", "US", "DE"]
+    },
+    "vertical": {
+      "type": ["string", "null"],
+      "description": "Content topic vertical or industry (e.g. food, tech, lifestyle). Null if not specified."
+    },
+    "target_audience": {
+      "type": ["string", "null"],
+      "description": "Brief description of the intended audience. Null if not specified."
+    },
+    "duration_sec": {
+      "type": ["integer", "null"],
+      "description": "Target duration in seconds. Required for video format. Null for non-video formats.",
+      "minimum": 1,
+      "maximum": 3600
+    },
+    "aspect_ratio": {
+      "type": ["string", "null"],
+      "description": "Target aspect ratio for video or image output. Null if not specified.",
+      "enum": ["16:9", "9:16", "1:1", "4:5", "4:3", null]
+    },
+    "style": {
+      "type": ["string", "null"],
+      "description": "Visual or tonal style direction (e.g. minimalist, cinematic, documentary). Null if not specified."
+    },
+    "constraints": {
+      "type": "array",
+      "description": "List of explicit constraints or rules this content must follow.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "required_unknowns": {
+      "type": "array",
+      "description": "List of field names that could not be determined from the input and need clarification.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp when this brief was created.",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "description": "Processing status of this brief.",
+      "enum": ["draft", "normalized", "invalid"]
+    }
+  },
+  "if": {
+    "properties": {
+      "format": { "const": "video" }
+    }
+  },
+  "then": {
+    "properties": {
+      "duration_sec": {
+        "type": "integer"
+      }
+    }
+  }
+}
