@@ -1,0 +1,165 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "review-report",
+  "title": "ReviewReport",
+  "description": "Quality assurance report produced by the review stage. Covers technical, content quality, and factual accuracy checks. Determines whether the pipeline can proceed to output.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_id",
+    "run_id",
+    "script_id",
+    "technical_pass",
+    "quality_pass",
+    "factual_pass",
+    "violations",
+    "uncertainties",
+    "required_actions",
+    "verdict",
+    "summary",
+    "reasoning",
+    "created_at"
+  ],
+  "properties": {
+    "report_id": {
+      "type": "string",
+      "description": "Unique identifier for this review report.",
+      "minLength": 1
+    },
+    "run_id": {
+      "type": "string",
+      "description": "ID of the run this report belongs to.",
+      "minLength": 1
+    },
+    "script_id": {
+      "type": "string",
+      "description": "ID of the Script that was reviewed.",
+      "minLength": 1
+    },
+    "technical_pass": {
+      "type": "boolean",
+      "description": "True if all technical checks passed (format, length, completeness, schema validity)."
+    },
+    "quality_pass": {
+      "type": "boolean",
+      "description": "True if content quality checks passed (tone, alignment with brief, structure)."
+    },
+    "factual_pass": {
+      "type": "boolean",
+      "description": "True if all factual claims in the script are traceable to the research pack with no unsupported assertions."
+    },
+    "violations": {
+      "type": "array",
+      "description": "List of rule violations or quality failures found during review. Empty if none.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "severity",
+          "message",
+          "related_stage"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Category of this violation (e.g. duration_mismatch, unsupported_claim, missing_cta, tone_violation).",
+            "minLength": 1
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity level of this violation.",
+            "enum": ["low", "medium", "high", "critical"]
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable description of the violation.",
+            "minLength": 1
+          },
+          "related_stage": {
+            "type": ["string", "null"],
+            "description": "Pipeline stage responsible for or related to this violation. Null if not attributable to a specific stage."
+          }
+        }
+      }
+    },
+    "uncertainties": {
+      "type": "array",
+      "description": "List of factual or content uncertainties flagged during review. Empty if none.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "message",
+          "related_claim",
+          "suggested_check"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Description of the uncertainty.",
+            "minLength": 1
+          },
+          "related_claim": {
+            "type": ["string", "null"],
+            "description": "The specific claim from the script or research pack that is uncertain. Null if not tied to a specific claim."
+          },
+          "suggested_check": {
+            "type": ["string", "null"],
+            "description": "Suggested action to resolve or verify this uncertainty. Null if no suggestion is available."
+          }
+        }
+      }
+    },
+    "required_actions": {
+      "type": "array",
+      "description": "List of required corrective actions before the pipeline can proceed. Empty if verdict is approved.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "action",
+          "priority",
+          "target_stage"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Description of the corrective action to take.",
+            "minLength": 1
+          },
+          "priority": {
+            "type": "string",
+            "description": "Priority level of this action.",
+            "enum": ["low", "medium", "high"]
+          },
+          "target_stage": {
+            "type": "string",
+            "description": "Pipeline stage that must address this action (e.g. script, research, angles).",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "description": "Final review verdict. approved: pipeline may proceed to output. needs_revision: return to script stage (max 2 cycles). rejected: stop pipeline.",
+      "enum": ["approved", "needs_revision", "rejected"]
+    },
+    "summary": {
+      "type": "string",
+      "description": "Short overall explanation of the review result. One or two sentences suitable for display in run status UI.",
+      "minLength": 1
+    },
+    "reasoning": {
+      "type": "string",
+      "description": "Detailed explanation of why the verdict was reached. Must reference specific violations, pass/fail flags, or uncertainties that drove the decision.",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp when this review report was created.",
+      "format": "date-time"
+    }
+  }
+}

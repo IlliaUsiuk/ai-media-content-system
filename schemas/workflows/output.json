@@ -1,0 +1,109 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workflow-output",
+  "title": "OutputWorkflowContract",
+  "description": "Input/output contract for the output workflow stage. The stage receives approved artifacts and produces a finalized run summary ready for human approval and optional publishing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["input", "output"],
+  "properties": {
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Input to the output stage: the brief, final script, and approved review report. The review_report verdict must be approved before this stage runs.",
+      "required": ["brief", "script", "review_report"],
+      "properties": {
+        "brief": {
+          "$ref": "../entities/content-brief.json"
+        },
+        "script": {
+          "$ref": "../entities/script.json"
+        },
+        "review_report": {
+          "$ref": "../entities/review-report.json"
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Finalized run output record. Written to publish-job.json and used as the basis for operator review and approval.",
+      "required": [
+        "run_id",
+        "status",
+        "summary",
+        "artifacts",
+        "next_actions"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "description": "ID of the run this output belongs to.",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "description": "Output readiness status. ready: all artifacts are present and review passed. needs_revision: review returned needs_revision. rejected: review returned rejected.",
+          "enum": ["ready", "needs_revision", "rejected"]
+        },
+        "summary": {
+          "type": "string",
+          "description": "Human-readable summary of the run result, suitable for display in the operator UI.",
+          "minLength": 1
+        },
+        "artifacts": {
+          "type": "array",
+          "description": "List of artifacts produced by this run and available for operator review. Empty if the run did not complete successfully.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "path", "type"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Human-readable name of the artifact (e.g. Content Brief, Script, Review Report).",
+                "minLength": 1
+              },
+              "path": {
+                "type": "string",
+                "description": "Relative path to the artifact file under runs/artifacts/{run_id}/ (e.g. brief.json, script.json).",
+                "minLength": 1
+              },
+              "type": {
+                "type": "string",
+                "description": "Artifact type category (e.g. brief, script, research, review, media).",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "next_actions": {
+          "type": "array",
+          "description": "Recommended actions for the operator or pipeline to take next. Empty if status is ready and no further actions are required.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["action", "target_stage", "priority"],
+            "properties": {
+              "action": {
+                "type": "string",
+                "description": "Description of the action to take (e.g. revise script pacing, add missing citation).",
+                "minLength": 1
+              },
+              "target_stage": {
+                "type": "string",
+                "description": "Pipeline stage that should handle this action (e.g. script, research, review).",
+                "minLength": 1
+              },
+              "priority": {
+                "type": "string",
+                "description": "Priority level of this action.",
+                "enum": ["low", "medium", "high"]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

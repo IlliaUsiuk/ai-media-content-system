@@ -1,0 +1,140 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "run-log",
+  "title": "RunLog",
+  "description": "Immutable log of a complete pipeline run. Records every stage transition, artifact references, costs, and errors. Written by the orchestrator; never modified after a stage completes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "run_id",
+    "brief_id",
+    "status",
+    "stages",
+    "started_at",
+    "finished_at",
+    "total_cost",
+    "errors",
+    "summary"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "Unique identifier for this run. Used as the artifact directory name under runs/artifacts/.",
+      "minLength": 1
+    },
+    "brief_id": {
+      "type": "string",
+      "description": "ID of the ContentBrief that initiated this run.",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "description": "Current overall status of the run.",
+      "enum": ["queued", "running", "completed", "failed"]
+    },
+    "stages": {
+      "type": "array",
+      "description": "Ordered list of stage execution records. One entry per pipeline stage, appended by the orchestrator as each stage is reached.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stage_name",
+          "status",
+          "started_at",
+          "finished_at",
+          "input_ref",
+          "output_ref",
+          "cost_tokens"
+        ],
+        "properties": {
+          "stage_name": {
+            "type": "string",
+            "description": "Name of the pipeline stage (e.g. intake, research, angles, script, review, output).",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "description": "Execution status of this stage.",
+            "enum": ["pending", "running", "completed", "failed"]
+          },
+          "started_at": {
+            "type": ["string", "null"],
+            "description": "ISO 8601 timestamp when this stage started. Null if stage has not started yet.",
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": ["string", "null"],
+            "description": "ISO 8601 timestamp when this stage finished. Null if stage has not completed.",
+            "format": "date-time"
+          },
+          "input_ref": {
+            "type": ["string", "null"],
+            "description": "Relative path to the input artifact consumed by this stage (e.g. brief.json). Null if stage has not started or has no file input.",
+            "minLength": 1
+          },
+          "output_ref": {
+            "type": ["string", "null"],
+            "description": "Relative path to the output artifact produced by this stage (e.g. research.json). Null if stage has not completed.",
+            "minLength": 1
+          },
+          "cost_tokens": {
+            "type": ["integer", "null"],
+            "description": "Total tokens consumed by this stage. Null for stages that do not invoke a language model.",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "started_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp when the run was started.",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": ["string", "null"],
+      "description": "ISO 8601 timestamp when the run completed or failed. Null while the run is still in progress.",
+      "format": "date-time"
+    },
+    "total_cost": {
+      "type": ["number", "null"],
+      "description": "Estimated total cost of the run in USD, summed across all stages. Null while the run is still in progress.",
+      "minimum": 0
+    },
+    "errors": {
+      "type": "array",
+      "description": "List of errors encountered during the run. Empty if no errors occurred.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stage_name",
+          "message",
+          "timestamp"
+        ],
+        "properties": {
+          "stage_name": {
+            "type": "string",
+            "description": "Name of the stage where this error occurred.",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "description": "Error message describing what went wrong.",
+            "minLength": 1
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "ISO 8601 timestamp when this error was recorded.",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": ["string", "null"],
+      "description": "Short human-readable description of the run result. Null while the run is still in progress. Written by the orchestrator upon completion or failure.",
+      "minLength": 1
+    }
+  }
+}

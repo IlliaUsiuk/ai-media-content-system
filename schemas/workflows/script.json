@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workflow-script",
+  "title": "ScriptWorkflowContract",
+  "description": "Input/output contract for the script generation workflow stage. The stage receives a ContentBrief, a ResearchPack, and the chosen ContentAngle, and produces a structured Script.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["input", "output"],
+  "properties": {
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Input to the script stage: the content brief, grounded research, and the selected angle to write the script around.",
+      "required": ["brief", "research_pack", "selected_angle"],
+      "properties": {
+        "brief": {
+          "$ref": "../entities/content-brief.json"
+        },
+        "research_pack": {
+          "$ref": "../entities/research-pack.json"
+        },
+        "selected_angle": {
+          "$ref": "../entities/content-angle.json"
+        }
+      }
+    },
+    "output": {
+      "$ref": "../entities/script.json"
+    }
+  }
+}

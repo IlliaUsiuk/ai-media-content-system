@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workflow-intake",
+  "title": "IntakeWorkflowContract",
+  "description": "Input/output contract for the intake workflow stage. The stage receives raw operator input and produces a schema-valid ContentBrief.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["input", "output"],
+  "properties": {
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Raw operator-supplied input to the intake stage.",
+      "required": ["raw_idea"],
+      "properties": {
+        "raw_idea": {
+          "type": "string",
+          "description": "Raw text idea submitted by the operator. The only required input.",
+          "minLength": 1
+        },
+        "requested_format": {
+          "type": ["string", "null"],
+          "description": "Content format requested by the operator. Null if not specified — intake stage must infer or mark unknown.",
+          "enum": ["video", "image", "text", "mixed", null]
+        },
+        "language": {
+          "type": ["string", "null"],
+          "description": "BCP-47 language code requested by the operator (e.g. en, uk, ru). Null if not specified.",
+          "minLength": 2,
+          "maxLength": 10
+        },
+        "constraints": {
+          "type": ["array", "null"],
+          "description": "Raw constraint strings provided by the operator (e.g. 'no music', 'under 60 seconds'). Null if not specified. The intake stage normalizes these into typed ContentBrief constraints.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "output": {
+      "$ref": "../entities/content-brief.json",
+      "description": "Normalized ContentBrief produced by the intake stage. Must be schema-valid before being written to runs/artifacts/{run_id}/brief.json."
+    }
+  }
+}

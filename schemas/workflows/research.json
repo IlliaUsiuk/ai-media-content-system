@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workflow-research",
+  "title": "ResearchWorkflowContract",
+  "description": "Input/output contract for the research workflow stage. The stage receives a ContentBrief and a set of source documents, and produces a document-grounded ResearchPack.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["input", "output"],
+  "properties": {
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Input to the research stage: a normalized ContentBrief and the source documents to research from.",
+      "required": ["brief", "sources"],
+      "properties": {
+        "brief": {
+          "$ref": "../entities/content-brief.json"
+        },
+        "sources": {
+          "type": "array",
+          "description": "Source documents provided for research. May be empty, in which case the output ResearchPack status will likely be insufficient. The research stage must not use general knowledge without a source entry here.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source_id",
+              "source_type",
+              "title",
+              "content",
+              "page_start",
+              "page_end"
+            ],
+            "properties": {
+              "source_id": {
+                "type": "string",
+                "description": "Unique identifier for this source document. Matches source_id in ResearchPack findings.",
+                "minLength": 1
+              },
+              "source_type": {
+                "type": "string",
+                "description": "Type of this source document.",
+                "enum": ["pdf", "text", "web", "document", "custom"]
+              },
+              "title": {
+                "type": ["string", "null"],
+                "description": "Title or filename of the source. Null if not available."
+              },
+              "content": {
+                "type": "string",
+                "description": "Full text content of the source document (or the relevant extracted portion). Must be non-empty.",
+                "minLength": 1
+              },
+              "page_start": {
+                "type": ["integer", "null"],
+                "description": "First page number of the content excerpt within the source. Null for sources without page structure (web, plain text).",
+                "minimum": 1
+              },
+              "page_end": {
+                "type": ["integer", "null"],
+                "description": "Last page number of the content excerpt within the source. Null for sources without page structure. Must be >= page_start when both are set.",
+                "minimum": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "output": {
+      "$ref": "../entities/research-pack.json"
+    }
+  }
+}

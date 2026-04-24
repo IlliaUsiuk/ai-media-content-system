@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workflow-angles",
+  "title": "AnglesWorkflowContract",
+  "description": "Input/output contract for the angle generation workflow stage. The stage receives a ContentBrief and ResearchPack and produces a set of distinct content angles.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["input", "output"],
+  "properties": {
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Input to the angles stage: a normalized ContentBrief, a completed ResearchPack, and an optional cap on the number of angles to generate.",
+      "required": ["brief", "research_pack"],
+      "properties": {
+        "brief": {
+          "$ref": "../entities/content-brief.json"
+        },
+        "research_pack": {
+          "$ref": "../entities/research-pack.json"
+        },
+        "max_angles": {
+          "type": "integer",
+          "description": "Maximum number of content angles to generate. Each angle must be materially different in approach, not just wording. Defaults to 5 if not specified.",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 5
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Output of the angles stage: a set of candidate content angles grounded in the research pack.",
+      "required": ["angles"],
+      "properties": {
+        "angles": {
+          "type": "array",
+          "description": "List of generated content angles. Must contain at least one angle and no more than max_angles.",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "$ref": "../entities/content-angle.json"
+          }
+        }
+      }
+    }
+  }
+}

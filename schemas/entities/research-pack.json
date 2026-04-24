@@ -62,8 +62,7 @@
               "additionalProperties": false,
               "required": [
                 "source_id",
-                "source_type",
-                "quote"
+                "source_type"
               ],
               "properties": {
                 "source_id": {
@@ -87,8 +86,19 @@
                 },
                 "quote": {
                   "type": "string",
-                  "description": "The exact quoted passage from the source that supports this claim.",
-                  "minLength": 1
+                  "description": "Exact quoted passage from the source. Required and non-empty for pdf/text/web/document sources. For custom sources, may be omitted; use finding.notes to describe the source."
+                }
+              },
+              "if": {
+                "properties": {
+                  "source_type": { "enum": ["pdf", "text", "web", "document"] }
+                },
+                "required": ["source_type"]
+              },
+              "then": {
+                "required": ["quote"],
+                "properties": {
+                  "quote": { "minLength": 1 }
                 }
               }
             }

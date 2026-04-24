@@ -1,0 +1,161 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "script",
+  "title": "Script",
+  "description": "Structured content script produced by the script stage. Contains ordered scenes with visual, voiceover, and on-screen text for each segment.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "script_id",
+    "brief_id",
+    "research_pack_id",
+    "angle_id",
+    "title",
+    "format",
+    "language",
+    "scenes",
+    "cta",
+    "total_duration_sec",
+    "created_at",
+    "status"
+  ],
+  "properties": {
+    "script_id": {
+      "type": "string",
+      "description": "Unique identifier for this script.",
+      "minLength": 1
+    },
+    "brief_id": {
+      "type": "string",
+      "description": "ID of the ContentBrief this script was produced for.",
+      "minLength": 1
+    },
+    "research_pack_id": {
+      "type": "string",
+      "description": "ID of the ResearchPack used as the factual basis for this script.",
+      "minLength": 1
+    },
+    "angle_id": {
+      "type": "string",
+      "description": "ID of the ContentAngle this script is built around.",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string",
+      "description": "Working title for this script.",
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "format": {
+      "type": "string",
+      "description": "Content format this script is written for.",
+      "enum": [
+        "short_video",
+        "long_video",
+        "image_post",
+        "carousel",
+        "text_post",
+        "mixed"
+      ]
+    },
+    "language": {
+      "type": "string",
+      "description": "BCP-47 language code for the script content (e.g. en, uk, ru).",
+      "minLength": 2,
+      "maxLength": 10
+    },
+    "scenes": {
+      "type": "array",
+      "description": "Ordered list of scenes that make up the script. Must contain at least one scene.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scene_id",
+          "order",
+          "duration_sec",
+          "visual_description",
+          "voiceover",
+          "on_screen_text",
+          "notes"
+        ],
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "description": "Unique identifier for this scene within the script.",
+            "minLength": 1
+          },
+          "order": {
+            "type": "integer",
+            "description": "Position of this scene in the sequence. Starts at 1.",
+            "minimum": 1
+          },
+          "duration_sec": {
+            "type": ["integer", "null"],
+            "description": "Duration of this scene in seconds. Null for non-video formats.",
+            "minimum": 1
+          },
+          "visual_description": {
+            "type": "string",
+            "description": "Description of what is shown visually in this scene. Used as input for media planning.",
+            "minLength": 1
+          },
+          "voiceover": {
+            "type": ["string", "null"],
+            "description": "Spoken text for this scene. Null if no voiceover is required."
+          },
+          "on_screen_text": {
+            "type": ["string", "null"],
+            "description": "Text displayed on screen during this scene (captions, titles, labels). Null if not applicable."
+          },
+          "notes": {
+            "type": ["string", "null"],
+            "description": "Production notes or directions for this scene (e.g. pacing, tone, transitions). Null if none."
+          }
+        }
+      }
+    },
+    "cta": {
+      "type": ["string", "null"],
+      "description": "Call to action appended after the final scene. Null if no CTA is required for this content."
+    },
+    "total_duration_sec": {
+      "type": ["integer", "null"],
+      "description": "Sum of all scene durations in seconds. Required (non-null) for short_video and long_video formats. Null for all other formats. Must match the brief's duration_sec constraint when set.",
+      "minimum": 1
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp when this script was created.",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "description": "Current status of this script.",
+      "enum": ["draft", "complete", "needs_revision"]
+    }
+  },
+  "if": {
+    "properties": {
+      "format": { "enum": ["short_video", "long_video"] }
+    },
+    "required": ["format"]
+  },
+  "then": {
+    "properties": {
+      "total_duration_sec": {
+        "type": "integer"
+      },
+      "scenes": {
+        "items": {
+          "properties": {
+            "duration_sec": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    }
+  }
+}

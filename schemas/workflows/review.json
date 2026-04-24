@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workflow-review",
+  "title": "ReviewWorkflowContract",
+  "description": "Input/output contract for the review workflow stage. The stage receives the ContentBrief, ResearchPack, and Script, and produces a ReviewReport with a verdict.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["input", "output"],
+  "properties": {
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Input to the review stage: all artifacts needed to evaluate technical, quality, and factual correctness of the script.",
+      "required": ["brief", "research_pack", "script"],
+      "properties": {
+        "brief": {
+          "$ref": "../entities/content-brief.json"
+        },
+        "research_pack": {
+          "$ref": "../entities/research-pack.json"
+        },
+        "script": {
+          "$ref": "../entities/script.json"
+        }
+      }
+    },
+    "output": {
+      "$ref": "../entities/review-report.json"
+    }
+  }
+}
