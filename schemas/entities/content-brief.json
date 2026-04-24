@@ -11,7 +11,6 @@
     "format",
     "language",
     "constraints",
-    "required_unknowns",
     "created_at",
     "status"
   ],
@@ -75,14 +74,26 @@
       "type": "array",
       "description": "List of explicit constraints or rules this content must follow.",
       "items": {
-        "type": "string",
-        "minLength": 1
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "value"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["platform", "style", "policy", "technical"]
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
       },
       "uniqueItems": true
     },
     "required_unknowns": {
       "type": "array",
       "description": "List of field names that could not be determined from the input and need clarification.",
+      "default": [],
       "items": {
         "type": "string",
         "minLength": 1
