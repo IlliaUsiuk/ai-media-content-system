@@ -32,7 +32,7 @@ def handle_media(run_id: str) -> tuple[bool, dict | str]:
         return False, f"Failed to read script artifact: {result}"
     script = result
 
-    output = {"items": []}
+    media_plan = {"items": []}
 
     if use_llm:
         ok, prompt = load_prompt(
@@ -44,12 +44,37 @@ def handle_media(run_id: str) -> tuple[bool, dict | str]:
                 llm_result = _call_llm(prompt)
                 items = llm_result.get("items", [])
                 if isinstance(items, list):
-                    output = {"items": items}
+                    media_plan = {"items": items}
             except (ImportError, Exception) as e:
                 print("MEDIA LLM ERROR:", e)
 
-    ok, msg = write_json(run_id, "media-plan", output)
+    ok, msg = write_json(run_id, "media-plan", media_plan)
     if not ok:
         return False, f"Failed to write media-plan artifact: {msg}"
 
-    return True, output
+    # build image prompts and generate images
+    from workflows.media.prompt_builder import build_image_prompts
+    from integrations.image.openai import generate_image
+
+    ok, prompts_result = build_image_prompts(run_id)
+    if not ok:
+        return False, f"Failed to build image prompts: {prompts_result}"
+
+    images = []
+    for item in prompts_result.get("prompts", []):
+        scene_id = item.get("scene_id", "")
+        prompt_text = item.get("prompt", "")
+        result = generate_image(prompt_text)
+        images.append({
+            "scene_id": scene_id,
+            "url": result.get("url"),
+            "prompt": prompt_text,
+            "provider": result.get("provider"),
+            "model": result.get("model"),
+        })
+
+    ok, msg = write_json(run_id, "images", {"images": images})
+    if not ok:
+        return False, f"Failed to write images artifact: {msg}"
+
+    return True, media_plan
