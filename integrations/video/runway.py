@@ -42,7 +42,7 @@ def create_video_job(image_path: str, prompt: str) -> dict:
             model="gen3a_turbo",
             prompt_image=image_data,
             prompt_text=prompt,
-            ratio="720:1280",
+            ratio="768:1280",
             duration=5,
         )
         return {
