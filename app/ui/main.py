@@ -24,6 +24,14 @@ def _load_json(path: Path):
         return None
 
 
+def _list_runs(limit: int = 10) -> list[str]:
+    if not _ARTIFACTS.exists():
+        return []
+    dirs = [d for d in _ARTIFACTS.iterdir() if d.is_dir() and d.name.startswith("run_")]
+    dirs.sort(key=lambda d: d.stat().st_mtime, reverse=True)
+    return [d.name for d in dirs[:limit]]
+
+
 def _save_json(path: Path, data: dict):
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -133,6 +141,24 @@ if "edit_mode" not in st.session_state:
 if "script_edited" not in st.session_state:
     st.session_state.script_edited = False
 
+# ── Sidebar: Run history ──────────────────────────────────────────────────────
+
+with st.sidebar:
+    st.header("Run history")
+    _runs = _list_runs()
+    if _runs:
+        _run_options = ["— select —"] + _runs
+        _selected = st.selectbox("Open existing run", _run_options, key="run_history_select")
+        if st.button("Load run", use_container_width=True):
+            if _selected != "— select —":
+                st.session_state.run_id = _selected
+                st.session_state.edit_mode = False
+                st.session_state.script_edited = False
+                st.rerun()
+    else:
+        st.caption("No runs yet")
+    st.button("Refresh runs", use_container_width=True)
+
 # ── Input ─────────────────────────────────────────────────────────────────────
 
 if st.button("Use example: Coffee trends for Gen Z"):
@@ -200,6 +226,7 @@ if not run_id:
     st.stop()
 
 run_dir = _ARTIFACTS / run_id
+st.caption(f"Current run: `{run_id}`")
 
 # ── Status badges ─────────────────────────────────────────────────────────────
 
