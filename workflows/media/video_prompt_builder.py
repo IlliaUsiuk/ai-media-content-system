@@ -27,27 +27,42 @@ def _call_llm(prompt: str) -> dict:
 
 
 def build_video_prompts(run_id: str) -> tuple[bool, dict | str]:
-    ok, result = read_json(run_id, "media-plan")
+    ok, media_plan = read_json(run_id, "media-plan")
     if not ok:
-        return False, f"Failed to read media-plan artifact: {result}"
-    media_plan = result
+        return False, f"Failed to read media-plan artifact: {media_plan}"
 
-    output = {"prompts": []}
+    ok, script = read_json(run_id, "script")
+    if not ok:
+        return False, f"Failed to read script artifact: {script}"
 
-    if use_llm:
-        ok, prompt = load_prompt(
-            _PROMPT_PATH,
-            variables={"media_plan": json.dumps(media_plan, ensure_ascii=False)},
-        )
-        if ok:
-            try:
-                llm_result = _call_llm(prompt)
-                prompts = llm_result.get("prompts", [])
-                if isinstance(prompts, list):
-                    output = {"prompts": prompts}
-            except (ImportError, Exception) as e:
-                print("VIDEO PROMPT BUILDER ERROR:", e)
+    if not use_llm:
+        output = {"prompts": []}
+        ok, msg = write_json(run_id, "video-prompts", output)
+        if not ok:
+            return False, f"Failed to write video-prompts artifact: {msg}"
+        return True, output
 
+    ok, prompt = load_prompt(
+        _PROMPT_PATH,
+        variables={
+            "media_plan": json.dumps(media_plan, ensure_ascii=False),
+            "script": json.dumps(script, ensure_ascii=False),
+        },
+    )
+    if not ok:
+        return False, f"Failed to load prompt: {prompt}"
+
+    try:
+        llm_result = _call_llm(prompt)
+    except Exception as e:
+        print("VIDEO PROMPT BUILDER ERROR:", e)
+        return False, f"LLM call failed: {e}"
+
+    prompts = llm_result.get("prompts", [])
+    if not isinstance(prompts, list) or len(prompts) == 0:
+        return False, "Video prompt builder returned empty prompts"
+
+    output = {"prompts": prompts}
     ok, msg = write_json(run_id, "video-prompts", output)
     if not ok:
         return False, f"Failed to write video-prompts artifact: {msg}"
