@@ -13,8 +13,8 @@ def generate_videos(run_id: str) -> tuple[bool, dict | str]:
     images_by_scene = {img["scene_id"]: img for img in images_result.get("images", [])}
 
     videos = []
-    try:
-        for item in prompts_result.get("prompts", []):
+    for item in prompts_result.get("prompts", []):
+        try:
             scene_id = item.get("scene_id", "")
             image = images_by_scene.get(scene_id, {}).get("url")
             videos.append({
@@ -23,9 +23,11 @@ def generate_videos(run_id: str) -> tuple[bool, dict | str]:
                 "prompt": item.get("prompt", ""),
                 "status": "ready_for_animation",
             })
-    except Exception as e:
-        print("VIDEO GENERATOR ERROR:", e)
-        videos = []
+        except Exception as e:
+            print(f"VIDEO GENERATOR ERROR (scene {item.get('scene_id', '?')}): {e}")
+
+    if not videos:
+        return False, "Video generator produced no video assets — check that images.json and video-prompts.json are non-empty"
 
     output = {"videos": videos}
     ok, msg = write_json(run_id, "video-assets", output)

@@ -94,6 +94,15 @@ def _generate_videos(run_id: str) -> bool:
                         "Check that ANTHROPIC_API_KEY is set and the video prompt builder is working."
                     )
                     return False
+            if artifact == "video-assets.json":
+                assets = result.get("videos", []) if isinstance(result, dict) else []
+                if not assets:
+                    status.update(label="Failed — video assets empty", state="error", expanded=True)
+                    st.error(
+                        "No video assets were created. "
+                        "Check that images.json and video-prompts.json contain data."
+                    )
+                    return False
             st.write(f"✓ {artifact}")
         status.update(label="Videos ready", state="complete", expanded=False)
     return True
@@ -162,7 +171,7 @@ if full_btn:
             st.stop()
     if ok:
         st.session_state.run_id = run_id
-        st.success(f"Done — run `{run_id}`")
+        st.rerun()
     else:
         st.error(f"Pipeline failed — {run_id}")
         st.stop()
@@ -171,9 +180,10 @@ if images_btn and st.session_state.run_id:
     with st.spinner("Regenerating images..."):
         try:
             _regenerate_images(st.session_state.run_id)
-            st.success("Images regenerated.")
         except Exception as e:
             st.error(f"Error: {e}")
+            st.stop()
+    st.rerun()
 
 if video_btn and st.session_state.run_id:
     try:
@@ -269,20 +279,20 @@ if script:
                     st.text_area(
                         "Voiceover",
                         value=scene.get("voiceover", ""),
-                        key=f"edit_vo_{order}",
+                        key=f"edit_vo_{run_id}_{order}",
                         height=100,
                     )
                 with col_r:
                     st.text_area(
                         "Visual description",
                         value=scene.get("visual_description", ""),
-                        key=f"edit_vis_{order}",
+                        key=f"edit_vis_{run_id}_{order}",
                         height=100,
                     )
                 st.text_input(
                     "On-screen text",
                     value=scene.get("on_screen_text", ""),
-                    key=f"edit_os_{order}",
+                    key=f"edit_os_{run_id}_{order}",
                 )
 
         st.write("")
@@ -294,11 +304,11 @@ if script:
                     order = scene.get("order", "?")
                     new_scenes.append({
                         **scene,
-                        "voiceover": st.session_state.get(f"edit_vo_{order}",
+                        "voiceover": st.session_state.get(f"edit_vo_{run_id}_{order}",
                                                           scene.get("voiceover", "")),
-                        "visual_description": st.session_state.get(f"edit_vis_{order}",
+                        "visual_description": st.session_state.get(f"edit_vis_{run_id}_{order}",
                                                                     scene.get("visual_description", "")),
-                        "on_screen_text": st.session_state.get(f"edit_os_{order}",
+                        "on_screen_text": st.session_state.get(f"edit_os_{run_id}_{order}",
                                                                scene.get("on_screen_text", "")),
                     })
                 _save_json(script_path, {**script, "scenes": new_scenes})
@@ -334,8 +344,9 @@ st.subheader("Generated images")
 
 images_path = run_dir / "images.json"
 images_data = _load_json(images_path)
-if images_data:
-    images = images_data.get("images", [])
+_images_list = images_data.get("images", []) if images_data else []
+if _images_list:
+    images = _images_list
     cols_per_row = 3
     for row_start in range(0, len(images), cols_per_row):
         row_imgs = images[row_start:row_start + cols_per_row]
@@ -391,7 +402,10 @@ if images_data:
         )
 
 else:
-    st.warning("images.json not found")
+    if images_data is not None:
+        st.warning("Image generation produced no images. Check that the image prompt builder ran correctly.")
+    else:
+        st.warning("images.json not found")
 
 st.divider()
 
@@ -423,11 +437,12 @@ st.subheader("Videos")
 
 videos_path = run_dir / "videos.json"
 videos_data = _load_json(videos_path)
-if videos_data:
-    for v in videos_data.get("videos", []):
+_videos_list = videos_data.get("videos", []) if videos_data else []
+if _videos_list:
+    for v in _videos_list:
         scene_id = v.get("scene_id", "scene")
         status = v.get("status", "")
-        url = v.get("url", "")
+        url = v.get("url", "") or ""
         st.markdown(f"**{scene_id}** · `{status}`")
         if url:
             p = Path(url)
@@ -436,7 +451,7 @@ if videos_data:
             elif url.startswith("http"):
                 st.markdown(f"[Watch video →]({url})")
             else:
-                st.caption(f"url: {url}")
+                st.caption("Mock video — no real file yet")
         else:
             st.caption("No video URL")
         st.write("")
@@ -473,21 +488,19 @@ log_p = _LOGS / f"{run_id}.json"
 
 # Collect local PNGs
 png_files = []
-if images_data:
-    for i, img in enumerate(images_data.get("images", [])):
-        url = img.get("url", "")
-        p = Path(url) if url else None
-        if p and p.exists() and p.suffix.lower() == ".png":
-            png_files.append((f"scene_{i + 1}.png", p))
+for i, img in enumerate(_images_list):
+    url = img.get("url", "")
+    p = Path(url) if url else None
+    if p and p.exists() and p.suffix.lower() == ".png":
+        png_files.append((f"scene_{i + 1}.png", p))
 
 # Collect local MP4s
 mp4_files = []
-if videos_data:
-    for i, v in enumerate(videos_data.get("videos", [])):
-        url = v.get("url", "")
-        p = Path(url) if url else None
-        if p and p.exists() and p.suffix.lower() == ".mp4":
-            mp4_files.append((f"scene_{i + 1}.mp4", p))
+for i, v in enumerate(_videos_list):
+    url = v.get("url", "") or ""
+    p = Path(url) if url else None
+    if p and p.exists() and p.suffix.lower() == ".mp4":
+        mp4_files.append((f"scene_{i + 1}.mp4", p))
 
 # script.txt
 export_cols = st.columns(4)

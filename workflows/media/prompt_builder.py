@@ -39,14 +39,20 @@ def build_image_prompts(run_id: str) -> tuple[bool, dict | str]:
             _PROMPT_PATH,
             variables={"media_plan": json.dumps(media_plan, ensure_ascii=False)},
         )
-        if ok:
-            try:
-                llm_result = _call_llm(prompt)
-                prompts = llm_result.get("prompts", [])
-                if isinstance(prompts, list):
-                    output = {"prompts": prompts}
-            except (ImportError, Exception) as e:
-                print("PROMPT BUILDER ERROR:", e)
+        if not ok:
+            return False, f"Failed to load image prompt template: {prompt}"
+
+        try:
+            llm_result = _call_llm(prompt)
+        except Exception as e:
+            print("PROMPT BUILDER ERROR:", e)
+            return False, f"Image prompt builder LLM call failed: {e}"
+
+        prompts = llm_result.get("prompts", [])
+        if not isinstance(prompts, list) or len(prompts) == 0:
+            return False, "Image prompt builder returned empty prompts"
+
+        output = {"prompts": prompts}
 
     ok, msg = write_json(run_id, "image-prompts", output)
     if not ok:
