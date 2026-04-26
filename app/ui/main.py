@@ -72,17 +72,27 @@ def _regenerate_image(run_id: str, scene_idx: int, prompt: str):
 
 
 def _generate_videos(run_id: str) -> bool:
+    from workflows.media.video_frame_prompt_builder import build_video_frame_prompts
+    from workflows.media.video_frame_generator import generate_video_frames
     from workflows.media.video_prompt_builder import build_video_prompts
     from workflows.media.video_generator import generate_videos
     from workflows.media.video_runner import run_video_jobs
     from workflows.media.video_collector import collect_videos
 
     steps = [
-        (build_video_prompts, "video-prompts.json",  "Building video prompts"),
-        (generate_videos,     "video-assets.json",   "Linking images to prompts"),
-        (run_video_jobs,      "video-jobs.json",     "Creating video jobs"),
-        (collect_videos,      "videos.json",         "Collecting results"),
+        (build_video_frame_prompts, "video-frame-prompts.json", "Building video frame prompts"),
+        (generate_video_frames,     "video-frames.json",        "Generating reference frames"),
+        (build_video_prompts,       "video-prompts.json",       "Building video prompts"),
+        (generate_videos,           "video-assets.json",        "Pairing frames with prompts"),
+        (run_video_jobs,            "video-jobs.json",          "Creating video jobs"),
+        (collect_videos,            "videos.json",              "Collecting results"),
     ]
+
+    _empty_checks = {
+        "video-frame-prompts.json": ("prompts", "Video frame prompts came back empty."),
+        "video-frames.json":        ("frames",  "Reference frames were not generated. Check OPENAI_API_KEY."),
+        "video-assets.json":        ("videos",  "No video assets created — check video-frames.json and video-prompts.json."),
+    }
 
     with st.status("Generating videos...", expanded=True) as status:
         for fn, artifact, label in steps:
@@ -92,24 +102,11 @@ def _generate_videos(run_id: str) -> bool:
                 status.update(label=f"Failed at {artifact}", state="error", expanded=True)
                 st.error(str(result))
                 return False
-            # After video prompts: check result is non-empty
-            if artifact == "video-prompts.json":
-                prompts = result.get("prompts", []) if isinstance(result, dict) else []
-                if not prompts:
-                    status.update(label="Failed — video prompts empty", state="error", expanded=True)
-                    st.error(
-                        "Video prompts were not generated. "
-                        "Check that ANTHROPIC_API_KEY is set and the video prompt builder is working."
-                    )
-                    return False
-            if artifact == "video-assets.json":
-                assets = result.get("videos", []) if isinstance(result, dict) else []
-                if not assets:
-                    status.update(label="Failed — video assets empty", state="error", expanded=True)
-                    st.error(
-                        "No video assets were created. "
-                        "Check that images.json and video-prompts.json contain data."
-                    )
+            if artifact in _empty_checks:
+                key, msg = _empty_checks[artifact]
+                if not (isinstance(result, dict) and result.get(key)):
+                    status.update(label=f"Failed — {artifact} empty", state="error", expanded=True)
+                    st.error(msg)
                     return False
             st.write(f"✓ {artifact}")
         status.update(label="Videos ready", state="complete", expanded=False)
@@ -365,132 +362,157 @@ else:
 
 st.divider()
 
-# ── Images ────────────────────────────────────────────────────────────────────
-
-st.subheader("Generated images")
+# ── Load all section data before rendering tabs ───────────────────────────────
 
 images_path = run_dir / "images.json"
 images_data = _load_json(images_path)
 _images_list = images_data.get("images", []) if images_data else []
-if _images_list:
-    images = _images_list
-    cols_per_row = 3
-    for row_start in range(0, len(images), cols_per_row):
-        row_imgs = images[row_start:row_start + cols_per_row]
-        cols = st.columns(cols_per_row)
-        for j, img in enumerate(row_imgs):
-            scene_idx = row_start + j
-            scene_label = f"Scene {scene_idx + 1}"
-            url = img.get("url", "")
-            with cols[j]:
-                _show_image(url, caption=scene_label)
-                st.caption(f"model: {img.get('model', '?')}  ·  {img.get('scene_id', '')}")
-                with st.expander("Prompt"):
-                    st.write(img.get("prompt", "—"))
 
-                # Download PNG
-                p = Path(url) if url else None
-                if p and p.exists() and p.suffix.lower() == ".png":
-                    st.download_button(
-                        label="Download PNG",
-                        data=p.read_bytes(),
-                        file_name=f"scene_{scene_idx + 1}.png",
-                        mime="image/png",
-                        key=f"dl_{scene_idx}",
-                    )
-                elif url and url.startswith("http"):
-                    st.markdown(f"[Open image ↗]({url})")
-                else:
-                    st.warning("Image file not found")
+_frames_data = _load_json(run_dir / "video-frames.json")
+_frames_list = _frames_data.get("frames", []) if _frames_data else []
 
-                if st.button("Regenerate image", key=f"regen_{scene_idx}"):
-                    with st.spinner("Regenerating..."):
-                        _regenerate_image(run_id, scene_idx, img.get("prompt", ""))
-                    st.rerun()
-
-    # Download all as ZIP
-    st.write("")
-    local_pngs = [
-        (f"scene_{i + 1}.png", Path(img["url"]))
-        for i, img in enumerate(images)
-        if img.get("url") and Path(img["url"]).exists() and Path(img["url"]).suffix.lower() == ".png"
-    ]
-    if local_pngs:
-        zip_buf = io.BytesIO()
-        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for name, path in local_pngs:
-                zf.writestr(name, path.read_bytes())
-        zip_buf.seek(0)
-        st.download_button(
-            label="Download all images (ZIP)",
-            data=zip_buf,
-            file_name="generated_images.zip",
-            mime="application/zip",
-        )
-
-else:
-    if images_data is not None:
-        st.warning("Image generation produced no images. Check that the image prompt builder ran correctly.")
-    else:
-        st.warning("images.json not found")
-
-st.divider()
-
-# ── Video assets ──────────────────────────────────────────────────────────────
-
-st.subheader("Video assets")
-
-va_path = run_dir / "video-assets.json"
-va_data = _load_json(va_path)
+va_data = _load_json(run_dir / "video-assets.json")
 va_videos = va_data.get("videos", []) if va_data else []
-if va_videos:
-    for i, v in enumerate(va_videos, start=1):
-        st.markdown(f"**Scene {i}** · status: `{v.get('status', '?')}`")
-        col_img, col_text = st.columns([1, 2])
-        with col_img:
-            _show_image(v.get("image", ""), caption="reference image")
-        with col_text:
-            st.markdown("**Video prompt**")
-            st.info(v.get("prompt", "—"))
-        st.write("")
-else:
-    st.info("Video assets are not ready yet. Generate videos after images are ready.")
-
-st.divider()
-
-# ── Videos ────────────────────────────────────────────────────────────────────
-
-st.subheader("Videos")
 
 videos_path = run_dir / "videos.json"
 videos_data = _load_json(videos_path)
 _videos_list = videos_data.get("videos", []) if videos_data else []
-if _videos_list:
-    for v in _videos_list:
-        scene_id = v.get("scene_id", "scene")
-        status = v.get("status", "")
-        url = v.get("url", "") or ""
-        st.markdown(f"**{scene_id}** · `{status}`")
-        if url:
-            p = Path(url)
-            if p.exists() and url.endswith(".mp4"):
-                st.video(str(p))
-            elif url.startswith("http"):
-                st.markdown(f"[Watch video →]({url})")
-            else:
-                st.caption("Mock video — no real file yet")
-        else:
-            st.caption("No video URL")
+
+# ── Tabs ──────────────────────────────────────────────────────────────────────
+
+tab_images, tab_video = st.tabs(["Images", "Video"])
+
+# ── Images tab ────────────────────────────────────────────────────────────────
+
+with tab_images:
+    st.subheader("Generated images")
+    if _images_list:
+        images = _images_list
+        cols_per_row = 3
+        for row_start in range(0, len(images), cols_per_row):
+            row_imgs = images[row_start:row_start + cols_per_row]
+            cols = st.columns(cols_per_row)
+            for j, img in enumerate(row_imgs):
+                scene_idx = row_start + j
+                scene_label = f"Scene {scene_idx + 1}"
+                url = img.get("url", "")
+                with cols[j]:
+                    _show_image(url, caption=scene_label)
+                    st.caption(f"model: {img.get('model', '?')}  ·  {img.get('scene_id', '')}")
+                    with st.expander("Prompt"):
+                        st.write(img.get("prompt", "—"))
+
+                    p = Path(url) if url else None
+                    if p and p.exists() and p.suffix.lower() == ".png":
+                        st.download_button(
+                            label="Download PNG",
+                            data=p.read_bytes(),
+                            file_name=f"scene_{scene_idx + 1}.png",
+                            mime="image/png",
+                            key=f"dl_{scene_idx}",
+                        )
+                    elif url and url.startswith("http"):
+                        st.markdown(f"[Open image ↗]({url})")
+                    else:
+                        st.warning("Image file not found")
+
+                    if st.button("Regenerate image", key=f"regen_{scene_idx}"):
+                        with st.spinner("Regenerating..."):
+                            _regenerate_image(run_id, scene_idx, img.get("prompt", ""))
+                        st.rerun()
+
         st.write("")
-else:
-    st.info("Video not generated yet.")
-    if st.button("Generate videos from images", type="primary"):
-        try:
-            ok = _generate_videos(run_id)
-            if ok:
-                st.rerun()
-        except Exception as e:
-            st.error(f"Error: {e}")
+        local_pngs = [
+            (f"scene_{i + 1}.png", Path(img["url"]))
+            for i, img in enumerate(images)
+            if img.get("url") and Path(img["url"]).exists() and Path(img["url"]).suffix.lower() == ".png"
+        ]
+        if local_pngs:
+            zip_buf = io.BytesIO()
+            with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                for name, path in local_pngs:
+                    zf.writestr(name, path.read_bytes())
+            zip_buf.seek(0)
+            st.download_button(
+                label="Download all images (ZIP)",
+                data=zip_buf,
+                file_name="generated_images.zip",
+                mime="application/zip",
+            )
+    else:
+        if images_data is not None:
+            st.warning("Image generation produced no images. Check that the image prompt builder ran correctly.")
+        else:
+            st.warning("images.json not found")
+
+# ── Video tab ─────────────────────────────────────────────────────────────────
+
+with tab_video:
+
+    # Reference frames
+    st.subheader("Reference frames")
+    if _frames_list:
+        cols_per_row = 3
+        for row_start in range(0, len(_frames_list), cols_per_row):
+            row_frames = _frames_list[row_start:row_start + cols_per_row]
+            cols = st.columns(cols_per_row)
+            for j, frame in enumerate(row_frames):
+                with cols[j]:
+                    _show_image(frame.get("url", ""), caption=f"Frame {row_start + j + 1}")
+                    st.caption(
+                        f"model: {frame.get('model', '?')}  ·  "
+                        f"{frame.get('scene_id', '')[-7:]}"
+                    )
+    else:
+        st.info("Reference frames not generated yet. Click 'Generate videos' to create them.")
+
+    st.divider()
+
+    # Video assets
+    st.subheader("Video assets")
+    if va_videos:
+        for i, v in enumerate(va_videos, start=1):
+            st.markdown(f"**Scene {i}** · status: `{v.get('status', '?')}`")
+            col_img, col_text = st.columns([1, 2])
+            with col_img:
+                _show_image(v.get("image", ""), caption="reference frame")
+            with col_text:
+                st.markdown("**Video prompt**")
+                st.info(v.get("prompt", "—"))
+            st.write("")
+    else:
+        st.info("Video assets are not ready yet.")
+
+    st.divider()
+
+    # Videos
+    st.subheader("Videos")
+    if _videos_list:
+        for v in _videos_list:
+            scene_id = v.get("scene_id", "scene")
+            status = v.get("status", "")
+            url = v.get("url", "") or ""
+            st.markdown(f"**{scene_id}** · `{status}`")
+            if url:
+                p = Path(url)
+                if p.exists() and url.endswith(".mp4"):
+                    st.video(str(p))
+                elif url.startswith("http"):
+                    st.markdown(f"[Watch video →]({url})")
+                else:
+                    st.caption("Mock video — no real file yet")
+            else:
+                st.caption("No video URL")
+            st.write("")
+    else:
+        st.info("Video not generated yet.")
+        if st.button("Generate video", type="primary", key="gen_video_tab"):
+            try:
+                ok = _generate_videos(run_id)
+                if ok:
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 st.divider()
 
