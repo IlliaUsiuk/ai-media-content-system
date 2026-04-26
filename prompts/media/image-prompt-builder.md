@@ -53,31 +53,59 @@ What to forbid:
 - any scene that looks like it belongs to a different video
 </continuity>
 
+<narrative_progression>
+Scenes must form a visual story arc. The character's state and action must change across the sequence.
+
+Emotional arc by position:
+- Scene 1: problem — character tense, uncertain, something is visibly wrong (furrowed brow, leaning back)
+- Scene 2: reaction — character notices, pauses, leans toward screen (surprise, concern)
+- Scene 3: examination — character studies data closely, traces something on screen (focused, intent)
+- Scene 4: action — character writes, types, adjusts, makes a decision (determined, active)
+- Scene 5: resolution — character settles back, expression clears, posture confident (calm, in control)
+
+For sequences shorter than 5 scenes, compress the arc proportionally.
+
+Per-prompt action requirements:
+- every prompt must name a specific visible action: hand on keyboard, pen moving on paper, finger pointing at screen, scrolling, writing, etc.
+- include "character is now [emotional state]" in every prompt
+- include "continues from previous scene by [specific action]" in every prompt after the first
+
+What to forbid:
+- character just sitting with no visible action
+- same body position repeated in consecutive scenes
+- same emotional state held across all scenes
+- "person at desk" framing with no narrative moment or action verb
+- abstract or metaphorical substitutes for the character
+</narrative_progression>
+
 <context>
 media_plan: {{media_plan}}
 </context>
 
 <task>
-For each item in media_plan:
+For each item in media_plan, in scene order:
 - compress visual_style + camera + lighting + mood into a single prompt string
-- apply the global visual direction and continuity rules above to every prompt
-- add a camera movement hint to each prompt
-- describe ONE clear visual moment with cinematic framing
-- keep the same character and same environment across all scenes
-- for scenes after the first, append: "same character, same room, continuation of previous shot"
-- keep it under 60 words
+- apply global visual direction, continuity, and narrative progression rules to every prompt
+- add a camera movement hint
+- describe ONE clear visual moment: character + specific action + emotional state
+- include "character is now [state]" in every prompt
+- for every scene after the first: include "continues from previous scene by [action]" and "same character, same room, continuation of previous shot"
+- keep it under 70 words
 </task>
 
 <rules>
 - one prompt = one scene
-- every prompt must include: subject, camera movement, lighting, mood
+- every prompt must include: subject, specific action verb, emotional state, camera movement, lighting, mood
 - shallow depth of field on every shot
 - warm-dark color palette on every shot
 - no flat lighting, no stock aesthetics, no infographic style
 - must look like a frame from the same film
 - same character in every scene — do not introduce new people
 - same room/environment in every scene — do not switch locations
-- for every scene after the first: include "same character, same room, continuation of previous shot"
+- emotional state must change across the arc: confused → focused → confident
+- body position and action must differ from the previous scene
+- every prompt must contain "character is now [state]"
+- every prompt after the first must contain "continues from previous scene by [action]" and "same character, same room, continuation of previous shot"
 - never replace the character with an abstract visual, graphic, or product shot
 - return only JSON
 </rules>
