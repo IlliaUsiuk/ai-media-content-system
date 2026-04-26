@@ -176,7 +176,7 @@ if images_btn:
     if not idea.strip():
         st.warning("Enter a content idea first.")
         st.stop()
-    with st.spinner("Running pipeline..."):
+    with st.spinner("Running pipeline (script + images)..."):
         try:
             from core.orchestrator.runner import run_pipeline
             ok, _new_run_id = run_pipeline(idea.strip())
@@ -186,12 +186,6 @@ if images_btn:
     if not ok:
         st.error(f"Pipeline failed — {_new_run_id}")
         st.stop()
-    with st.spinner("Generating images..."):
-        try:
-            _regenerate_images(_new_run_id)
-        except Exception as e:
-            st.error(f"Image generation error: {e}")
-            st.stop()
     st.session_state.run_id = _new_run_id
     st.session_state.active_tab = "images"
     st.rerun()
