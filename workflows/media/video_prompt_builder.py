@@ -7,32 +7,32 @@ from core.tools.artifact_store import read_json, write_json
 _ARC = [
     {
         "state": "confused and tense",
-        "action": "stares downward at their desk, slowly sets a phone down with a heavy exhale",
+        "action": "stare downward at their desk, slowly set a phone down with a heavy exhale",
         "camera": "slow push-in, shallow depth of field",
     },
     {
         "state": "unsettled and concerned",
-        "action": "leans forward over the desk, reaches for a pen, then pauses mid-motion with a furrowed brow",
+        "action": "lean forward over the desk, reach for a pen, then pause mid-motion with a furrowed brow",
         "camera": "handheld slight motion, rack focus to hands",
     },
     {
         "state": "focused and analytical",
-        "action": "traces a finger slowly across papers on the desk, eyes scanning methodically",
+        "action": "trace a finger slowly across papers on the desk, eyes scanning methodically",
         "camera": "rack focus from background to face, slow push-in",
     },
     {
         "state": "determined and decisive",
-        "action": "writes deliberately in a notebook with a set jaw, posture upright and forward",
+        "action": "write deliberately in a notebook with a set jaw, posture upright and forward",
         "camera": "medium shot, slow push-in, subtle handheld shake",
     },
     {
         "state": "calm and clear-headed",
-        "action": "sits back in the chair, exhales slowly, looks up from the desk with quiet resolve",
+        "action": "sit back in the chair, exhale slowly, look up from the desk with quiet resolve",
         "camera": "static hold, gentle pull-back, shallow depth of field",
     },
     {
         "state": "grounded and authoritative",
-        "action": "holds steady eye contact forward, hands resting calmly on the desk",
+        "action": "hold steady eye contact forward, hands resting calmly on the desk",
         "camera": "static hold, face centered, shallow depth of field",
     },
 ]
@@ -96,7 +96,12 @@ def build_video_prompts(run_id: str) -> tuple[bool, dict | str]:
         camera_motion = arc["camera"]
 
         plan = plan_by_scene.get(scene_id, {})
-        lighting = _first_sentence(plan.get("lighting", "Warm practical desk lamp, soft directional shadows."))
+        _lighting_raw = _first_sentence(plan.get("lighting", "Warm practical desk lamp, soft directional shadows."))
+        _screen_lighting = {"pure screen", "no physical lighting", "screen only", "screen-lit", "screen glow only"}
+        if any(kw in _lighting_raw.lower() for kw in _screen_lighting):
+            lighting = "Dim desk lamp with soft screen glow, screen content out of focus."
+        else:
+            lighting = _lighting_raw
         mood = _first_sentence(plan.get("mood", "Focused and tense."))
 
         # Only use visual_description if it describes character/environment, not UI.
