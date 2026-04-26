@@ -5,6 +5,7 @@ import zipfile
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
@@ -36,16 +37,6 @@ def _save_json(path: Path, data: dict):
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def _download_btn(path: Path, label: str):
-    if path.exists():
-        st.download_button(
-            label=label,
-            data=path.read_bytes(),
-            file_name=path.name,
-            mime="application/json",
-        )
-
-
 def _show_image(url: str, caption: str = ""):
     if not url:
         st.caption(f"{caption} — no image")
@@ -71,6 +62,11 @@ def _regenerate_image(run_id: str, scene_idx: int, prompt: str):
     _save_json(images_path, data)
 
 
+def _regenerate_images(run_id: str):
+    from workflows.media.handler import handle_media
+    handle_media(run_id)
+
+
 def _generate_videos(run_id: str) -> bool:
     from workflows.media.video_frame_prompt_builder import build_video_frame_prompts
     from workflows.media.video_frame_generator import generate_video_frames
@@ -81,7 +77,7 @@ def _generate_videos(run_id: str) -> bool:
 
     steps = [
         (build_video_frame_prompts, "video-frame-prompts.json", "Building video frame prompts"),
-        (generate_video_frames,     "video-frames.json",        "Generating reference frames"),
+        (generate_video_frames,     "video-frames.json",        "Generating source frames"),
         (build_video_prompts,       "video-prompts.json",       "Building video prompts"),
         (generate_videos,           "video-assets.json",        "Pairing frames with prompts"),
         (run_video_jobs,            "video-jobs.json",          "Creating video jobs"),
@@ -90,8 +86,8 @@ def _generate_videos(run_id: str) -> bool:
 
     _empty_checks = {
         "video-frame-prompts.json": ("prompts", "Video frame prompts came back empty."),
-        "video-frames.json":        ("frames",  "Reference frames were not generated. Check OPENAI_API_KEY."),
-        "video-assets.json":        ("videos",  "No video assets created — check video-frames.json and video-prompts.json."),
+        "video-frames.json":        ("frames",  "Source frames not generated. Check OPENAI_API_KEY."),
+        "video-assets.json":        ("videos",  "No video assets — check video-frames.json and video-prompts.json."),
     }
 
     with st.status("Generating videos...", expanded=True) as status:
@@ -113,17 +109,12 @@ def _generate_videos(run_id: str) -> bool:
     return True
 
 
-def _regenerate_images(run_id: str):
-    from workflows.media.handler import handle_media
-    handle_media(run_id)
-
-
 # ── Page config ───────────────────────────────────────────────────────────────
 
 st.set_page_config(page_title="AI Media Content System", layout="wide")
 
 st.title("AI Media Content System")
-st.markdown("Generate scripts, images and video assets from a single idea.")
+st.caption("Transform a content idea into a script, standalone images, and AI video.")
 
 st.divider()
 
@@ -137,6 +128,8 @@ if "edit_mode" not in st.session_state:
     st.session_state.edit_mode = False
 if "script_edited" not in st.session_state:
     st.session_state.script_edited = False
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = None
 
 # ── Sidebar: Run history ──────────────────────────────────────────────────────
 
@@ -171,15 +164,57 @@ idea = st.text_area(
 
 col_a, col_b, col_c = st.columns(3)
 with col_a:
-    full_btn = st.button("Generate full pipeline", type="primary", use_container_width=True)
+    images_btn = st.button("Generate images", type="primary", use_container_width=True)
 with col_b:
-    images_btn = st.button("Regenerate images", use_container_width=True,
-                           disabled=st.session_state.run_id is None)
+    video_btn = st.button("Generate video", type="primary", use_container_width=True)
 with col_c:
-    video_btn = st.button("Generate videos", use_container_width=True,
-                          disabled=st.session_state.run_id is None)
+    full_btn = st.button("Generate full package", use_container_width=True)
 
 # ── Actions ───────────────────────────────────────────────────────────────────
+
+if images_btn:
+    if not idea.strip():
+        st.warning("Enter a content idea first.")
+        st.stop()
+    with st.spinner("Running pipeline..."):
+        try:
+            from core.orchestrator.runner import run_pipeline
+            ok, _new_run_id = run_pipeline(idea.strip())
+        except Exception as e:
+            st.error(f"Pipeline error: {e}")
+            st.stop()
+    if not ok:
+        st.error(f"Pipeline failed — {_new_run_id}")
+        st.stop()
+    with st.spinner("Generating images..."):
+        try:
+            _regenerate_images(_new_run_id)
+        except Exception as e:
+            st.error(f"Image generation error: {e}")
+            st.stop()
+    st.session_state.run_id = _new_run_id
+    st.session_state.active_tab = "images"
+    st.rerun()
+
+if video_btn:
+    if not idea.strip():
+        st.warning("Enter a content idea first.")
+        st.stop()
+    with st.spinner("Running pipeline..."):
+        try:
+            from core.orchestrator.runner import run_pipeline
+            ok, _new_run_id = run_pipeline(idea.strip())
+        except Exception as e:
+            st.error(f"Pipeline error: {e}")
+            st.stop()
+    if not ok:
+        st.error(f"Pipeline failed — {_new_run_id}")
+        st.stop()
+    st.session_state.run_id = _new_run_id
+    st.session_state.active_tab = "video"
+    ok_vid = _generate_videos(_new_run_id)
+    if ok_vid:
+        st.rerun()
 
 if full_btn:
     if not idea.strip():
@@ -188,33 +223,16 @@ if full_btn:
     with st.spinner("Generating content..."):
         try:
             from core.orchestrator.runner import run_pipeline
-            ok, run_id = run_pipeline(idea.strip())
+            ok, _new_run_id = run_pipeline(idea.strip())
         except Exception as e:
             st.error(f"Pipeline error: {e}")
             st.stop()
     if ok:
-        st.session_state.run_id = run_id
+        st.session_state.run_id = _new_run_id
         st.rerun()
     else:
-        st.error(f"Pipeline failed — {run_id}")
+        st.error(f"Pipeline failed — {_new_run_id}")
         st.stop()
-
-if images_btn and st.session_state.run_id:
-    with st.spinner("Regenerating images..."):
-        try:
-            _regenerate_images(st.session_state.run_id)
-        except Exception as e:
-            st.error(f"Error: {e}")
-            st.stop()
-    st.rerun()
-
-if video_btn and st.session_state.run_id:
-    try:
-        ok = _generate_videos(st.session_state.run_id)
-        if ok:
-            st.rerun()
-    except Exception as e:
-        st.error(f"Error: {e}")
 
 # ── Nothing to show yet ───────────────────────────────────────────────────────
 
@@ -229,27 +247,21 @@ st.caption(f"Current run: `{run_id}`")
 
 st.divider()
 
-script_ready = (run_dir / "script.json").exists()
-images_ready = (run_dir / "images.json").exists()
-_vdata = _load_json(run_dir / "videos.json")
-videos_ready = bool(_vdata and _vdata.get("videos"))
+script_ready  = (run_dir / "script.json").exists()
+images_ready  = (run_dir / "images.json").exists()
+frames_ready  = (run_dir / "video-frames.json").exists()
+_vdata        = _load_json(run_dir / "videos.json")
+videos_ready  = bool(_vdata and _vdata.get("videos"))
 
-s1, s2, s3, _ = st.columns([1, 1, 1, 3])
-with s1:
-    if script_ready:
-        st.success("Script ready")
-    else:
-        st.caption("○ Script")
-with s2:
-    if images_ready:
-        st.success("Images ready")
-    else:
-        st.caption("○ Images")
-with s3:
-    if videos_ready:
-        st.success("Videos ready")
-    else:
-        st.caption("○ Videos")
+b1, b2, b3, b4, _ = st.columns([1, 1, 1, 1, 2])
+with b1:
+    st.success("Script") if script_ready else st.caption("○ Script")
+with b2:
+    st.success("Images") if images_ready else st.caption("○ Images")
+with b3:
+    st.success("Video frames") if frames_ready else st.caption("○ Video frames")
+with b4:
+    st.success("Videos") if videos_ready else st.caption("○ Videos")
 
 st.divider()
 
@@ -275,7 +287,6 @@ with _btn_col:
 if script:
     scenes = script.get("scenes", [])
 
-    # ── Pending-edit callout ──────────────────────────────────────────────────
     if st.session_state.script_edited and not st.session_state.edit_mode:
         st.info("Script was edited. Regenerate images to apply your changes.")
         _regen_col, _ = st.columns([2, 3])
@@ -286,12 +297,10 @@ if script:
                     try:
                         _regenerate_images(run_id)
                         st.session_state.script_edited = False
-                        st.success("Images regenerated.")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error: {e}")
 
-    # ── Edit mode ─────────────────────────────────────────────────────────────
     if st.session_state.edit_mode:
         for scene in scenes:
             order = scene.get("order", "?")
@@ -339,8 +348,6 @@ if script:
                 st.session_state.edit_mode = False
                 st.session_state.script_edited = True
                 st.rerun()
-
-    # ── View mode ─────────────────────────────────────────────────────────────
     else:
         for scene in scenes:
             order = scene.get("order", "?")
@@ -362,46 +369,79 @@ else:
 
 st.divider()
 
-# ── Load all section data before rendering tabs ───────────────────────────────
+# ── Pre-load all tab data ─────────────────────────────────────────────────────
 
-images_path = run_dir / "images.json"
-images_data = _load_json(images_path)
-_images_list = images_data.get("images", []) if images_data else []
+images_data    = _load_json(run_dir / "images.json")
+_images_list   = images_data.get("images", []) if images_data else []
 
-_frames_data = _load_json(run_dir / "video-frames.json")
-_frames_list = _frames_data.get("frames", []) if _frames_data else []
+_frames_data   = _load_json(run_dir / "video-frames.json")
+_frames_list   = _frames_data.get("frames", []) if _frames_data else []
 
-va_data = _load_json(run_dir / "video-assets.json")
-va_videos = va_data.get("videos", []) if va_data else []
+_vprompts_data = _load_json(run_dir / "video-prompts.json")
+_vprompts_list = _vprompts_data.get("prompts", []) if _vprompts_data else []
 
-videos_path = run_dir / "videos.json"
-videos_data = _load_json(videos_path)
-_videos_list = videos_data.get("videos", []) if videos_data else []
+videos_data    = _load_json(run_dir / "videos.json")
+_videos_list   = videos_data.get("videos", []) if videos_data else []
+
+# Collect exportable files
+_png_files = [
+    (f"scene_{i + 1}.png", Path(img["url"]))
+    for i, img in enumerate(_images_list)
+    if img.get("url") and Path(img["url"]).exists() and Path(img["url"]).suffix.lower() == ".png"
+]
+_frame_files = [
+    (f"frame_{i + 1}.png", Path(fr["url"]))
+    for i, fr in enumerate(_frames_list)
+    if fr.get("url") and Path(fr["url"]).exists() and Path(fr["url"]).suffix.lower() == ".png"
+]
+_mp4_files = [
+    (f"scene_{i + 1}.mp4", Path(v["url"]))
+    for i, v in enumerate(_videos_list)
+    if (v.get("url") or "") and Path(v["url"]).exists() and Path(v["url"]).suffix.lower() == ".mp4"
+]
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
 
-tab_images, tab_video = st.tabs(["Images", "Video"])
+tab_images, tab_video, tab_export, tab_debug = st.tabs(["Images", "Video", "Export", "Debug"])
 
-# ── Images tab ────────────────────────────────────────────────────────────────
+# Auto-switch to the tab requested by the last action
+_TAB_MAP = {"images": 0, "video": 1, "export": 2, "debug": 3}
+_switch_to = st.session_state.active_tab
+if _switch_to in _TAB_MAP:
+    _idx = _TAB_MAP[_switch_to]
+    st.session_state.active_tab = None
+    components.html(
+        f"""<script>
+(function go() {{
+    var t = window.parent.document.querySelectorAll('[role="tab"]');
+    if (t[{_idx}]) {{ t[{_idx}].click(); }}
+    else {{ setTimeout(go, 50); }}
+}})();
+</script>""",
+        height=0,
+    )
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Images tab — standalone creatives
+# ══════════════════════════════════════════════════════════════════════════════
 
 with tab_images:
-    st.subheader("Generated images")
+    st.subheader("Standalone Images")
+    st.caption("Creative images for posts, ads, thumbnails or visual concepts.")
+
     if _images_list:
-        images = _images_list
         cols_per_row = 3
-        for row_start in range(0, len(images), cols_per_row):
-            row_imgs = images[row_start:row_start + cols_per_row]
+        for row_start in range(0, len(_images_list), cols_per_row):
+            row_imgs = _images_list[row_start:row_start + cols_per_row]
             cols = st.columns(cols_per_row)
             for j, img in enumerate(row_imgs):
                 scene_idx = row_start + j
-                scene_label = f"Scene {scene_idx + 1}"
                 url = img.get("url", "")
                 with cols[j]:
-                    _show_image(url, caption=scene_label)
+                    _show_image(url, caption=f"Scene {scene_idx + 1}")
                     st.caption(f"model: {img.get('model', '?')}  ·  {img.get('scene_id', '')}")
                     with st.expander("Prompt"):
                         st.write(img.get("prompt", "—"))
-
                     p = Path(url) if url else None
                     if p and p.exists() and p.suffix.lower() == ".png":
                         st.download_button(
@@ -409,48 +449,57 @@ with tab_images:
                             data=p.read_bytes(),
                             file_name=f"scene_{scene_idx + 1}.png",
                             mime="image/png",
-                            key=f"dl_{scene_idx}",
+                            key=f"dl_img_{scene_idx}",
                         )
                     elif url and url.startswith("http"):
                         st.markdown(f"[Open image ↗]({url})")
                     else:
                         st.warning("Image file not found")
-
-                    if st.button("Regenerate image", key=f"regen_{scene_idx}"):
+                    if st.button("Regenerate", key=f"regen_img_{scene_idx}"):
                         with st.spinner("Regenerating..."):
                             _regenerate_image(run_id, scene_idx, img.get("prompt", ""))
                         st.rerun()
 
         st.write("")
-        local_pngs = [
-            (f"scene_{i + 1}.png", Path(img["url"]))
-            for i, img in enumerate(images)
-            if img.get("url") and Path(img["url"]).exists() and Path(img["url"]).suffix.lower() == ".png"
-        ]
-        if local_pngs:
-            zip_buf = io.BytesIO()
-            with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                for name, path in local_pngs:
-                    zf.writestr(name, path.read_bytes())
-            zip_buf.seek(0)
+        if _png_files:
+            _zip_buf = io.BytesIO()
+            with zipfile.ZipFile(_zip_buf, "w", zipfile.ZIP_DEFLATED) as _zf:
+                for _name, _p in _png_files:
+                    _zf.writestr(_name, _p.read_bytes())
+            _zip_buf.seek(0)
             st.download_button(
                 label="Download all images (ZIP)",
-                data=zip_buf,
-                file_name="generated_images.zip",
+                data=_zip_buf,
+                file_name="standalone_images.zip",
                 mime="application/zip",
             )
+
+        st.write("")
+        if st.button("Regenerate standalone images", use_container_width=True):
+            with st.spinner("Regenerating..."):
+                try:
+                    _regenerate_images(run_id)
+                except Exception as e:
+                    st.error(f"Error: {e}")
+                    st.stop()
+            st.rerun()
+
     else:
         if images_data is not None:
             st.warning("Image generation produced no images. Check that the image prompt builder ran correctly.")
         else:
-            st.warning("images.json not found")
+            st.info("No standalone images yet. Run the full pipeline to generate them.")
 
-# ── Video tab ─────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Video tab — Runway pipeline
+# ══════════════════════════════════════════════════════════════════════════════
 
 with tab_video:
+    st.subheader("AI Video")
+    st.caption("Video uses dedicated source frames optimized for Runway, not the standalone images.")
 
-    # Reference frames
-    st.subheader("Reference frames")
+    # A. Video source frames
+    st.markdown("#### Video source frames")
     if _frames_list:
         cols_per_row = 3
         for row_start in range(0, len(_frames_list), cols_per_row):
@@ -458,35 +507,25 @@ with tab_video:
             cols = st.columns(cols_per_row)
             for j, frame in enumerate(row_frames):
                 with cols[j]:
-                    _show_image(frame.get("url", ""), caption=f"Frame {row_start + j + 1}")
+                    _show_image(frame.get("url", ""), caption=f"Runway source frame {row_start + j + 1}")
                     st.caption(
                         f"model: {frame.get('model', '?')}  ·  "
                         f"{frame.get('scene_id', '')[-7:]}"
                     )
     else:
-        st.info("Reference frames not generated yet. Click 'Generate videos' to create them.")
+        st.info("Video frames are not generated yet. Click **Generate videos** below to create Runway-ready frames.")
 
-    st.divider()
+    # B. Video prompts
+    if _vprompts_list:
+        st.write("")
+        st.markdown("#### Video prompts")
+        for item in _vprompts_list:
+            with st.expander(item.get("scene_id", "scene")):
+                st.write(item.get("prompt", "—"))
 
-    # Video assets
-    st.subheader("Video assets")
-    if va_videos:
-        for i, v in enumerate(va_videos, start=1):
-            st.markdown(f"**Scene {i}** · status: `{v.get('status', '?')}`")
-            col_img, col_text = st.columns([1, 2])
-            with col_img:
-                _show_image(v.get("image", ""), caption="reference frame")
-            with col_text:
-                st.markdown("**Video prompt**")
-                st.info(v.get("prompt", "—"))
-            st.write("")
-    else:
-        st.info("Video assets are not ready yet.")
-
-    st.divider()
-
-    # Videos
-    st.subheader("Videos")
+    # C. Generated videos
+    st.write("")
+    st.markdown("#### Generated videos")
     if _videos_list:
         for v in _videos_list:
             scene_id = v.get("scene_id", "scene")
@@ -502,178 +541,187 @@ with tab_video:
                 else:
                     st.caption("Mock video — no real file yet")
             else:
-                st.caption("No video URL")
+                st.caption("No video URL yet")
             st.write("")
     else:
-        st.info("Video not generated yet.")
-        if st.button("Generate video", type="primary", key="gen_video_tab"):
-            try:
-                ok = _generate_videos(run_id)
-                if ok:
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Error: {e}")
+        st.info("No videos yet.")
 
-st.divider()
+    st.write("")
+    if st.button("Generate videos", type="primary", use_container_width=True, key="gen_video_tab"):
+        try:
+            ok = _generate_videos(run_id)
+            if ok:
+                st.rerun()
+        except Exception as e:
+            st.error(f"Error: {e}")
 
-# ── Run log ───────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Export tab
+# ══════════════════════════════════════════════════════════════════════════════
 
-with st.expander("Run log"):
-    log_path = _LOGS / f"{run_id}.json"
-    log = _load_json(log_path)
-    if log:
-        st.json(log)
-        _download_btn(log_path, "Download run-log.json")
-    else:
-        st.warning("run log not found")
+with tab_export:
+    st.subheader("Export package")
 
-st.divider()
+    log_p = _LOGS / f"{run_id}.json"
 
-# ── Export package ────────────────────────────────────────────────────────────
+    script_txt = ""
+    if script:
+        lines = [script.get("title", "Script"), ""]
+        for scene in script.get("scenes", []):
+            lines.append(f"Scene {scene.get('order', '?')} ({scene.get('duration_sec', '?')}s)")
+            if scene.get("voiceover"):
+                lines.append(f"Voiceover: {scene['voiceover']}")
+            if scene.get("on_screen_text"):
+                lines.append(f"On-screen: {scene['on_screen_text']}")
+            if scene.get("visual_description"):
+                lines.append(f"Visual: {scene['visual_description']}")
+            lines.append("")
+        if script.get("cta"):
+            lines.append(f"CTA: {script['cta']}")
+        script_txt = "\n".join(lines)
 
-st.subheader("Export package")
+    exp_cols = st.columns(4)
+    _ci = 0
 
-log_p = _LOGS / f"{run_id}.json"
-
-# Collect local PNGs
-png_files = []
-for i, img in enumerate(_images_list):
-    url = img.get("url", "")
-    p = Path(url) if url else None
-    if p and p.exists() and p.suffix.lower() == ".png":
-        png_files.append((f"scene_{i + 1}.png", p))
-
-# Collect local MP4s
-mp4_files = []
-for i, v in enumerate(_videos_list):
-    url = v.get("url", "") or ""
-    p = Path(url) if url else None
-    if p and p.exists() and p.suffix.lower() == ".mp4":
-        mp4_files.append((f"scene_{i + 1}.mp4", p))
-
-# script.txt
-export_cols = st.columns(4)
-col_i = 0
-
-script_txt = ""
-if script:
-    lines = [script.get("title", "Script"), ""]
-    for scene in script.get("scenes", []):
-        lines.append(f"Scene {scene.get('order', '?')} ({scene.get('duration_sec', '?')}s)")
-        if scene.get("voiceover"):
-            lines.append(f"Voiceover: {scene['voiceover']}")
-        if scene.get("on_screen_text"):
-            lines.append(f"On-screen: {scene['on_screen_text']}")
-        if scene.get("visual_description"):
-            lines.append(f"Visual: {scene['visual_description']}")
-        lines.append("")
-    if script.get("cta"):
-        lines.append(f"CTA: {script['cta']}")
-    script_txt = "\n".join(lines)
-
-if script_txt:
-    with export_cols[col_i % 4]:
-        st.download_button(
-            label="Download script.txt",
-            data=script_txt.encode("utf-8"),
-            file_name="script.txt",
-            mime="text/plain",
-            key="export_script_txt",
-        )
-    col_i += 1
-
-# images ZIP
-if png_files:
-    img_zip = io.BytesIO()
-    with zipfile.ZipFile(img_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-        for name, p in png_files:
-            zf.writestr(name, p.read_bytes())
-    img_zip.seek(0)
-    with export_cols[col_i % 4]:
-        st.download_button(
-            label="Download images.zip",
-            data=img_zip,
-            file_name="images.zip",
-            mime="application/zip",
-            key="export_images_zip",
-        )
-    col_i += 1
-
-# videos ZIP
-if mp4_files:
-    vid_zip = io.BytesIO()
-    with zipfile.ZipFile(vid_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-        for name, p in mp4_files:
-            zf.writestr(name, p.read_bytes())
-    vid_zip.seek(0)
-    with export_cols[col_i % 4]:
-        st.download_button(
-            label="Download videos.zip",
-            data=vid_zip,
-            file_name="videos.zip",
-            mime="application/zip",
-            key="export_videos_zip",
-        )
-    col_i += 1
-
-# Full package ZIP
-_JSON_ARTIFACTS = [
-    "script.json", "media-plan.json", "image-prompts.json", "images.json",
-    "video-prompts.json", "video-assets.json", "video-jobs.json", "videos.json",
-]
-full_zip = io.BytesIO()
-with zipfile.ZipFile(full_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-    for filename in _JSON_ARTIFACTS:
-        p = run_dir / filename
-        if p.exists():
-            zf.write(p, f"artifacts/{filename}")
-    if log_p.exists():
-        zf.write(log_p, f"artifacts/run-log.json")
     if script_txt:
-        zf.writestr("script.txt", script_txt.encode("utf-8"))
-    for name, p in png_files:
-        zf.writestr(f"images/{name}", p.read_bytes())
-    for name, p in mp4_files:
-        zf.writestr(f"videos/{name}", p.read_bytes())
-full_zip.seek(0)
+        with exp_cols[_ci % 4]:
+            st.download_button(
+                label="script.txt",
+                data=script_txt.encode("utf-8"),
+                file_name="script.txt",
+                mime="text/plain",
+                key="export_script_txt",
+            )
+        _ci += 1
 
-st.write("")
-st.download_button(
-    label="Download full package (ZIP)",
-    data=full_zip,
-    file_name=f"{run_id}.zip",
-    mime="application/zip",
-    type="primary",
-    use_container_width=True,
-)
+    if _png_files:
+        _iz = io.BytesIO()
+        with zipfile.ZipFile(_iz, "w", zipfile.ZIP_DEFLATED) as _zf:
+            for _n, _p in _png_files:
+                _zf.writestr(_n, _p.read_bytes())
+        _iz.seek(0)
+        with exp_cols[_ci % 4]:
+            st.download_button(
+                label="Images ZIP",
+                data=_iz,
+                file_name="standalone_images.zip",
+                mime="application/zip",
+                key="export_images_zip",
+            )
+        _ci += 1
 
-# ── Developer / Debug ─────────────────────────────────────────────────────────
+    if _frame_files:
+        _fz = io.BytesIO()
+        with zipfile.ZipFile(_fz, "w", zipfile.ZIP_DEFLATED) as _zf:
+            for _n, _p in _frame_files:
+                _zf.writestr(_n, _p.read_bytes())
+        _fz.seek(0)
+        with exp_cols[_ci % 4]:
+            st.download_button(
+                label="Video frames ZIP",
+                data=_fz,
+                file_name="video_frames.zip",
+                mime="application/zip",
+                key="export_frames_zip",
+            )
+        _ci += 1
 
-with st.expander("Developer / Debug"):
-    st.markdown("**JSON artifacts**")
-    dev_cols = st.columns(4)
-    dev_i = 0
-    all_json = _JSON_ARTIFACTS + []
-    for filename in all_json:
-        p = run_dir / filename
-        if p.exists():
-            with dev_cols[dev_i % 4]:
+    if _mp4_files:
+        _vz = io.BytesIO()
+        with zipfile.ZipFile(_vz, "w", zipfile.ZIP_DEFLATED) as _zf:
+            for _n, _p in _mp4_files:
+                _zf.writestr(_n, _p.read_bytes())
+        _vz.seek(0)
+        with exp_cols[_ci % 4]:
+            st.download_button(
+                label="Videos ZIP",
+                data=_vz,
+                file_name="videos.zip",
+                mime="application/zip",
+                key="export_videos_zip",
+            )
+        _ci += 1
+
+    st.write("")
+    _JSON_ARTIFACTS = [
+        "script.json", "media-plan.json", "image-prompts.json", "images.json",
+        "video-frame-prompts.json", "video-frames.json",
+        "video-prompts.json", "video-assets.json", "video-jobs.json", "videos.json",
+    ]
+    _full_zip = io.BytesIO()
+    with zipfile.ZipFile(_full_zip, "w", zipfile.ZIP_DEFLATED) as _zf:
+        for _fn in _JSON_ARTIFACTS:
+            _fp = run_dir / _fn
+            if _fp.exists():
+                _zf.write(_fp, f"artifacts/{_fn}")
+        if log_p.exists():
+            _zf.write(log_p, "artifacts/run-log.json")
+        if script_txt:
+            _zf.writestr("script.txt", script_txt.encode("utf-8"))
+        for _n, _p in _png_files:
+            _zf.writestr(f"images/{_n}", _p.read_bytes())
+        for _n, _p in _frame_files:
+            _zf.writestr(f"video_frames/{_n}", _p.read_bytes())
+        for _n, _p in _mp4_files:
+            _zf.writestr(f"videos/{_n}", _p.read_bytes())
+    _full_zip.seek(0)
+
+    st.download_button(
+        label="Download full package (ZIP)",
+        data=_full_zip,
+        file_name=f"{run_id}.zip",
+        mime="application/zip",
+        type="primary",
+        use_container_width=True,
+    )
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Debug tab
+# ══════════════════════════════════════════════════════════════════════════════
+
+with tab_debug:
+    st.subheader("Debug")
+
+    with st.expander("Run log", expanded=False):
+        _log = _load_json(_LOGS / f"{run_id}.json")
+        if _log:
+            st.json(_log)
+        else:
+            st.warning("Run log not found")
+
+    st.markdown("**Raw artifacts**")
+    _ALL_JSON = [
+        "brief.json", "research.json", "angles.json", "script.json",
+        "media-plan.json", "image-prompts.json", "images.json",
+        "video-frame-prompts.json", "video-frames.json",
+        "video-prompts.json", "video-assets.json", "video-jobs.json", "videos.json",
+        "review.json", "output.json",
+    ]
+    _dcols = st.columns(4)
+    _di = 0
+    for _fn in _ALL_JSON:
+        _fp = run_dir / _fn
+        if _fp.exists():
+            with _dcols[_di % 4]:
                 st.download_button(
-                    label=filename,
-                    data=p.read_bytes(),
-                    file_name=filename,
+                    label=_fn,
+                    data=_fp.read_bytes(),
+                    file_name=_fn,
                     mime="application/json",
-                    key=f"dev_{filename}",
+                    key=f"dev_{_fn}",
                 )
-            dev_i += 1
-    if log_p.exists():
-        with dev_cols[dev_i % 4]:
+            _di += 1
+    _lp = _LOGS / f"{run_id}.json"
+    if _lp.exists():
+        with _dcols[_di % 4]:
             st.download_button(
                 label="run-log.json",
-                data=log_p.read_bytes(),
+                data=_lp.read_bytes(),
                 file_name="run-log.json",
                 mime="application/json",
                 key="dev_runlog",
             )
-        dev_i += 1
-    st.markdown(f"**run_id:** `{run_id}`")
+        _di += 1
+
+    st.write("")
+    st.caption(f"run_id: `{run_id}`")
